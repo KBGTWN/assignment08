@@ -110,7 +110,165 @@ plot1 + plot2 + plot_layout(ncol = 2)
 ##Exercise 02
 
 ```{r}
+#a. Create a tibble called votes_numeric that contains only the numeric votes
+#data from the 103rd Senate.
+
+library(dplyr)
+
+votes_numeric <- select_if(votes_103, is.numeric)
+
+#b. Next, we will conduct cluster analysis on votes_numeric. Use
+#library(factoextra) to calculate within sum of squares, silhouette
+#distance, and gap statistic. Make sure to set.seed(20220412) first. Note:
+#we used library(tidyclust) to calculate WSS in class.
+
+library(factoextra)
+library(ggplot2)
+library(cluster)
+
+# Set the seed for reproducibility
+set.seed(20220412)
+
+# Remove any missing values
+votes_numeric <- na.omit(votes_numeric)
+
+# Calculate within sum of squares
+wss <- numeric(10)
+for (i in 1:10) {
+  km.res <- kmeans(votes_numeric, centers = i, nstart = 25)
+  wss[i] <- km.res$tot.withinss
+}
+
+# Calculate silhouette distance
+sil <- silhouette(kmeans(votes_numeric, centers = 2, nstart = 25))
 
 
+# Calculate gap statistic
+gap_stat <- gap_statistic(votes_numeric, 
+                           kmeans, 
+                           K.max = 10, 
+                           nboot = 50, 
+                           B = 100, 
+                           verbose = FALSE)
+
+
+#c. Create a function that takes a number of clusters k as one argument and the votes_103 dataframe as another argument and uses library(recipes) and
+#library(tidyclust) to perform PCA and kmeans clustering where k is set
+#as the number of clusters for kmeans and the votes columns are used as the
+#data. The function should then produce a scatterplot with PC1 on the x-axis
+#and PC2 on the y-axis and the color encoding the cluster assignment. The
+#graph should have good labels and a title that includes the number of
+#clusters being used (see the example below). The function should return a
+#ggplot object.
+
+library(recipes)
+library(tidyclust)
+library(ggplot2)
+
+cluster_votes <- function(k, votes_df) {
+  
+  # Create a recipe with PCA and kmeans
+  votes_rec <- recipe(~., data = votes_df) %>%
+    # Convert all non-numeric columns to numeric
+    step_mutate_at(vars(where(~ is.factor(.) | is.character(.) | is.logical(.))), list(~ as.numeric(.))) %>% 
+    # Specify the columns to use for PCA
+    step_pca(starts_with("v"), num_comp = 2, threshold = 0.95) %>%
+    # Cluster the data using k-means
+    step_kmeans(all_numeric(), centers = k, nstart = 25) %>%
+    prep()
+  
+  # Extract the transformed data and cluster assignments
+  votes_clusters <- augment(votes_rec) %>% 
+    select(PC1, PC2, .cluster)
+  
+  # Plot the results
+  ggplot(votes_clusters, aes(x = PC1, y = PC2, color = factor(.cluster))) + 
+    geom_point(size = 3) +
+    labs(x = "PC1", y = "PC2", title = paste0("Clustering Votes (k = ", k, ")"))
+}
+
+
+#d. Run your function with each of the different potential optimal numbers of
+#clusters suggested by the different metrics calculated in part a and display
+#the graphs side by side.
+
+
+```
+
+##Exercise 03
+
+```{r}
+#a. Read in the executive orders dataset used in the text analysis lab and filter to exclude rows where the text column is missing. Use the
+#unnest_tokens() function to create bigrams (two-word tokens) from the
+#text. In the lab we used this function to create single-word tokens. Read the
+#documentation to learn how to modify that function call to create
+#bigrams.The n-grams chapter of Text Mining with R may also be helpful.
+
+
+
+#b. Split the bigram column into two separate columns (word1 and word2) with
+#each word of the bigram (Hint: the separate() function may be helpful).
+#Filter the dataframe to rows that do not have any stop words for either word
+#of the bigram. Count the number of appearances of each bigram (unique
+#combinations of word1 and word2) and filter to rows with more than 150
+#appearances. Assign the result to bigram_150 and use the code below to
+#visualize the data.
+
+#c. Calculate the tf-idf for each president and bigram. To do this, you will first want to count the number of appearances of each bigram-president pair
+#(remembering to filter out stop words). After separating the bigrams into
+#separate words for filtering out stop words, you’ll want to merge the
+#individual word columns back into a single bigram column before calculating
+#tf-idf (Hint: check out the paste() function).
+
+
+
+#d. Plot the bigrams with the 15 largest tf-idf values for each president.
+
+```
+
+##Exercise 04
+This exercise uses a dataset of the descriptions and voting outcomes of bills from the 114th Senate from legiscan.com. Your goal will be to create a supervised machine learning model using library(tidymodels) to classify whether each bill passed (passed = 1) or did not pass (passed = 0).
+```{r}
+
+#a. Read senate_bills_114.csv into R and save as an object called bills.
+#You will need to modify passed to be a factor with “1” as the first level and
+#“0” as the second as shown below. We do this because tidymodels by default
+#treats the first factor level as the positive case. How many bills in the
+#dataset passed?
+
+
+#b. Split bills into a training and testing dataset setting strata = "passed"
+#and prop = 0.75. Note that you will not need the bill_number column and
+#can drop it from the dataframe before creating the split. Don’t forget to
+#set.seed(20220414) first.
+
+#c. We will perform our text pre-processing steps using library(textrecipes),
+#a package built for tidymodels with additional recipe steps for text analysis.
+#Read the textrecipes website and function reference to identify the right
+#steps to create a recipe that performs the following steps: 1) tokenizes the
+#description column, 2) removes stopwords (note, you’ll have to
+#install.packages("stopwords") first to use step_stopwords), 3) stems
+#the words, 4) filters to the 200 most common tokens, 5) performs tf-idf.
+
+
+#d. prep() and bake() your recipe on the training data to take a look at the
+#words used for tf-idf (they will be the end of the column names). Are there
+#any words that seem like domain-specific stopwords? Update
+#step_stopwords() in your recipe to remove these stopwords using the
+#custom_stopword_source argument and re-create your recipe.
+
+
+
+#e. Create a model object using logistic regression (logistic_reg()) and the
+#"glm" package for the engine. Create a workflow with your recipe and model
+#specification and then pass that workflow to fit() to train the model on the
+#training data. (Note that we aren’t asking you to do cross-validation or
+#model tuning here)
+
+
+
+#f. Use the fitted model to predict() the class membership and class
+#probability using the test data. Calculate the accuracy, precision, recall, and the roc curve for your model. Using these metric results, how did your model do? What are at least three things you might add to your approach to
+#improve your model results?
 
 ```
