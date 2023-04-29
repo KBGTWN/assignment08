@@ -1,0 +1,116 @@
+---
+title: "Assignment 08"
+author: "Elena Spielmann and Keegan Brown"
+format: html
+editor: visual
+editor_options: 
+  chunk_output_type: console
+---
+
+Private github repository url: https://github.com/KBGTWN/assignment08
+
+## Exercise 01
+
+This exercise uses data on U.S. Senate Votes from Session 103 (1993) to Session 114 (2016) from Brad Robinson via data.world. In the votes_time_series.csv data on Canvas, each row represents a senator-Session pair.
+
+```{r}
+library(dplyr)
+library(tidyverse)
+
+#a. Read in the votes_time_series.csv file and replace all missing values with
+#0 (the value signifying an absent vote). Filter the dataframe to only
+#include the votes for Session 103 and save the result in a new dataframe
+#called votes_103.
+
+
+votes <- read.csv("votes_time_series.csv")
+votes[is.na(votes)] <- 0
+
+votes_103 <- votes %>%
+  select(name, party, v103) %>%
+  replace(is.na(.), 0)
+
+
+
+#b. Using library(recipes) create a recipe called votes_pca_rec that runs
+#Principal Components Analysis on the votes columns (they all start with
+#“v”). Add prep() at the end of the recipe to estimate the loadings.
+
+library(recipes)
+library(dplyr)
+
+votes_pca_rec <- recipe(data = votes) %>%
+  select(starts_with("v")) %>%
+  step_pca(all_predictors(), num_comp = NULL) %>%
+  prep()
+
+############ I keep getting errors with the ^ code so I tried to adjust with as.numeric below but I keep getting more issues. 
+
+library(recipes)
+library(dplyr)
+votes_pca_rec <- recipe(~., data = votes) %>% 
+  # Convert all non-numeric columns to numeric
+  step_mutate_at(vars(where(~ is.factor(.) | is.character(.) | is.logical(.))), list(~ as.numeric(.))) %>% 
+  # Specify the columns to use for PCA
+  step_pca(starts_with("v"), num_comp = NULL, threshold = 0.95) %>% 
+  # Estimate the loadings
+  prep()
+
+#View data
+str(votes)
+
+
+#c.How much variance does the first principal component explain? How much cumulative variance is explained by the first 5 principal components?
+
+# Extract the variance explained by each principal component
+var_explained <- summary(votes_pca_rec)$explained_variance
+
+# First principal component explained variance
+var_explained[1]
+
+# Cumulative variance explained by the first 5 principal components
+sum(var_explained[1:5])
+
+#d. bake() the prepped recipe you created in part b to obtain the principal components, assigning the output to a new dataframe called votes_pcs. Use votes_pcs to create two scatterplots visualizing the data with PC1 on the x-axis and PC2 on the y-axis: The first plot should use the aesthetic mapping color = party and the second plot should use color = region, where region is equal to one of the four Census regions (West, Midwest, Northeast, South). You can append region to votes_pcs by using the states_regions.csv file on Canvas. Make sure to include good titles and labels in your graph. Include the graphs side by side in your Quarto document. Hint: library(patchwork) will be useful for displaying the graphs side by side.
+
+library(ggplot2)
+library(patchwork)
+
+# Bake the recipe to obtain the principal components
+votes_pcs <- bake(votes_pca_rec, new_data = NULL)
+
+# Load the regions file
+regions <- read.csv("states_regions.csv")
+
+# Append region to votes_pcs
+votes_pcs <- left_join(votes_103, regions, by = c("name" = "state")) %>%
+  select(-name)
+
+# Create the scatterplot with color = party
+plot1 <- ggplot(votes_pcs, aes(x = PC1, y = PC2, color = party)) +
+  geom_point() +
+  labs(title = "Senate Votes PC1 vs PC2 by Party",
+       x = "PC1",
+       y = "PC2",
+       color = "Party")
+
+# Create the scatterplot with color = region
+plot2 <- ggplot(votes_pcs, aes(x = PC1, y = PC2, color = region)) +
+  geom_point() +
+  labs(title = "Senate Votes PC1 vs PC2 by Region",
+       x = "PC1",
+       y = "PC2",
+       color = "Region")
+
+# Display the plots side by side
+plot1 + plot2 + plot_layout(ncol = 2)
+
+```
+
+##Exercise 02
+
+```{r}
+
+
+
+```
