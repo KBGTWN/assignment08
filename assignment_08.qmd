@@ -53,12 +53,11 @@ This exercise uses data on U.S. Senate Votes from Session 103 (1993) to Session 
 #called votes_103.
 
 
-votes <- read.csv("votes_time_series.csv",
-                  na.strings = c("na", ""))
-votes[is.na(votes)] <- 0
+votes <- read.csv("votes_time_series.csv")%>%
+    replace(is.na(.), 0)
 
 votes_103 <- votes %>%
-  select(name, party, v103)
+  filter(session == 103)
 
 
 #b. Using library(recipes) create a recipe called votes_pca_rec that runs
@@ -123,7 +122,10 @@ plot1 + plot2 + plot_layout(ncol = 2)
 #a. Create a tibble called votes_numeric that contains only the numeric votes
 #data from the 103rd Senate.
 
-votes_numeric <- select_if(votes_103, is.numeric)
+
+votes_numeric <- votes_103 %>% 
+  select(starts_with('v'))
+
 
 #b. Next, we will conduct cluster analysis on votes_numeric. Use
 #library(factoextra) to calculate within sum of squares, silhouette
@@ -133,17 +135,12 @@ votes_numeric <- select_if(votes_103, is.numeric)
 # Set the seed for reproducibility
 set.seed(20220412)
 
-# Remove any missing values
-votes_numeric <- na.omit(votes_numeric)
-
 
 fviz_nbclust(votes_numeric, FUNcluster = kmeans, method = "silhouette")
+fviz_nbclust(votes_numeric, FUNcluster = kmeans, method = "wss")
+fviz_nbclust(votes_numeric, FUNcluster = kmeans, method = "gap_stat")
+               
 
-fviz_nbclust(votes_numeric, FUNcluster =  = kmeans, method = c("wss",
-                                                     "silhoutte",
-                                                     "gap_stat"))
-
-#Note to elena - above should be 
 
 
 #c. Create a function that takes a number of clusters k as one argument and the votes_103 dataframe as another argument and uses library(recipes) and
