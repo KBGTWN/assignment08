@@ -125,10 +125,8 @@ plot1 + plot2 + plot_layout(ncol = 2)
 #a. Create a tibble called votes_numeric that contains only the numeric votes
 #data from the 103rd Senate.
 
-
 votes_numeric <- votes_103 %>% 
   select(starts_with('v'))
-
 
 #b. Next, we will conduct cluster analysis on votes_numeric. Use
 #library(factoextra) to calculate within sum of squares, silhouette
@@ -180,7 +178,14 @@ cluster_votes <- function(k, votes_numeric) {
     kmeans_wflow <- workflow(
     preprocessor = kmeans_rec,
     spec = kmeans_spec)
+    
+    name<-kmeans_wflow %>%
+    fit(data = votes_numeric)
     # Extract the transformed data and cluster assignments
+    temp <- bind_cols(
+    data,
+    votes_rec,
+    clusters = name )
     
   # Plot the results
   ggplot(votes_numeric, aes(x = PC1, y = PC2, color = factor(.cluster))) + 
@@ -188,7 +193,7 @@ cluster_votes <- function(k, votes_numeric) {
     labs(x = "PC1", y = "PC2", title = paste0("Clustering Votes (k = ", k, ")"))
 }
 
-optimal_suggested = c(2, 4, 10)
+optimal_suggested = c(2, 4, 9)
 
 for (i in optimal_suggested){
 cluster_votes(optimal_suggested, votes_numeric)
