@@ -52,26 +52,20 @@ This exercise uses data on U.S. Senate Votes from Session 103 (1993) to Session 
 #include the votes for Session 103 and save the result in a new dataframe
 #called votes_103.
 
-
 votes <- read.csv("votes_time_series.csv")%>%
     replace(is.na(.), 0)
 
 votes_103 <- votes %>%
-  filter(session == 103)
-
+  filter(session == "103")
 
 #b. Using library(recipes) create a recipe called votes_pca_rec that runs
 #Principal Components Analysis on the votes columns (they all start with
 #“v”). Add prep() at the end of the recipe to estimate the loadings.
 
-
 votes_pca_rec <- recipe(~ ., data = votes)%>%
   step_pca(all_numeric(), id = "pca")%>%
   prep()
 
-#View data
-
-#############################
 
 #c.How much variance does the first principal component explain? How much cumulative variance is explained by the first 5 principal components?
 votes_pca_rec %>%
@@ -79,7 +73,15 @@ prep() %>%
 tidy(id = "pca", type = "variance") %>%
 filter(terms == "variance") %>%
 mutate(pct_var = value/sum(value)) %>%
-slice_head(n = 5)
+slice_head(n = 1)
+
+
+votes_pca_rec %>%
+  prep() %>%
+  tidy(id = "pca", type = "variance") %>%
+  filter(terms == "variance") %>%
+  mutate(pct_var = value/sum(value)) %>%
+  slice_head(n = 5)
 
 #d. bake() the prepped recipe you created in part b to obtain the principal components, assigning the output to a new dataframe called votes_pcs. Use votes_pcs to create two scatterplots visualizing the data with PC1 on the x-axis and PC2 on the y-axis: The first plot should use the aesthetic mapping color = party and the second plot should use color = region, where region is equal to one of the four Census regions (West, Midwest, Northeast, South). You can append region to votes_pcs by using the states_regions.csv file on Canvas. Make sure to include good titles and labels in your graph. Include the graphs side by side in your Quarto document. Hint: library(patchwork) will be useful for displaying the graphs side by side.
 
@@ -90,13 +92,14 @@ votes_pcs<- votes_pca_rec%>%
 
 
 ##plot 
-plot1 <- ggplot(votes_pcs, aes(x = PC1, y = PC2, color = party)) +
-  geom_point() +
+plot1 <- ggplot() + 
+  geom_point(data = votes_pcs, mapping = aes(x = PC1, y = PC2, color = party)) +
   labs(title = "Senate Votes PC1 vs PC2 by Party",
        x = "PC1",
        y = "PC2",
        color = "Party")
 
+plot1
 # Load the regions file
 regions <- read.csv("states_regions.csv")
 
@@ -153,21 +156,18 @@ cluster_votes <- function(k, votes_numeric) {
   
   # Create a recipe with PCA and kmeans
   votes_rec <- recipe(~., data = votes_numeric) %>%
-    # Convert all non-numeric columns to numeric
-    step_mutate_at(vars(where(~ is.factor(.) | is.character(.) | is.logical(.))), list(~ as.numeric(.))) %>% 
     # Specify the columns to use for PCA
-    step_pca(starts_with("v"), num_comp = k, threshold = 0.95)%>%
+    step_pca(starts_with("v"))%>%
     prep()%>%
     bake(new_data = votes_numeric)
     
     #recipe creation
-  kmeans_rec <- recipe(formula = ~ ., data = votes_numeric) %>%
-    step_range(all_predictors()) 
+  kmeans_rec <- recipe(formula = ~ ., data = votes_numeric)%>%
+    step_select(all_numeric())
   
     #prep/bake
     k_data_numeric <- kmeans_rec %>%
-            prep() %>%
-            bake(new_data = votes_numeric)
+            prep()
     
     #kmeans model spec 
     kmeans_spec <- k_means(
@@ -182,10 +182,8 @@ cluster_votes <- function(k, votes_numeric) {
     spec = kmeans_spec)
     # Extract the transformed data and cluster assignments
     
-    select(PC1, PC2, .cluster)
-  
   # Plot the results
-  ggplot(votes_clusters, aes(x = PC1, y = PC2, color = factor(.cluster))) + 
+  ggplot(votes_numeric, aes(x = PC1, y = PC2, color = factor(.cluster))) + 
     geom_point(size = 3) +
     labs(x = "PC1", y = "PC2", title = paste0("Clustering Votes (k = ", k, ")"))
 }
@@ -249,9 +247,9 @@ exec_bigrams_split <- exec_bigrams %>%
 
 # Remove stop words
 data(stop_words)
-exec_bigrams_filtered <- exec_bigrams_split %>%
-  anti_join(stop_words, by = c("word1" = "word", "word2" = "word")) %>%
-  filter(!is.na(word1), !is.na(word2))
+exec_bigrams_filtered <- 
+  exec_bigrams_split%>%
+  anti_join(stop_words, by = c("word1" = "word", "word2" = "word"))
 
 #################above code does not work.^^ below attempt also didn't work.
 
