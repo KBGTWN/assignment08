@@ -140,9 +140,6 @@ fviz_nbclust(votes_numeric, FUNcluster = kmeans, method = "silhouette")
 fviz_nbclust(votes_numeric, FUNcluster = kmeans, method = "wss")
 fviz_nbclust(votes_numeric, FUNcluster = kmeans, method = "gap_stat")
                
-
-
-
 #c. Create a function that takes a number of clusters k as one argument and the votes_103 dataframe as another argument and uses library(recipes) and
 #library(tidyclust) to perform PCA and kmeans clustering where k is set
 #as the number of clusters for kmeans and the votes columns are used as the
@@ -152,21 +149,39 @@ fviz_nbclust(votes_numeric, FUNcluster = kmeans, method = "gap_stat")
 #clusters being used (see the example below). The function should return a
 #ggplot object.
 
-
-cluster_votes <- function(k, votes_df) {
+cluster_votes <- function(k, votes_numeric) {
   
   # Create a recipe with PCA and kmeans
-  votes_rec <- recipe(~., data = votes_df) %>%
+  votes_rec <- recipe(~., data = votes_numeric) %>%
     # Convert all non-numeric columns to numeric
     step_mutate_at(vars(where(~ is.factor(.) | is.character(.) | is.logical(.))), list(~ as.numeric(.))) %>% 
     # Specify the columns to use for PCA
-    step_pca(starts_with("v"), num_comp = 2, threshold = 0.95) %>%
-    # Cluster the data using k-means
-    step_kmeans(all_numeric(), centers = k, nstart = 25) %>%
-    prep()
+    step_pca(starts_with("v"), num_comp = k, threshold = 0.95)%>%
+    prep()%>%
+    bake(new_data = votes_numeric)
+    
+    #recipe creation
+  kmeans_rec <- recipe(formula = ~ ., data = votes_numeric) %>%
+    step_range(all_predictors()) 
   
-  # Extract the transformed data and cluster assignments
-  votes_clusters <- augment(votes_rec) %>% 
+    #prep/bake
+    k_data_numeric <- kmeans_rec %>%
+            prep() %>%
+            bake(new_data = votes_numeric)
+    
+    #kmeans model spec 
+    kmeans_spec <- k_means(
+        num_clusters = k 
+        ) %>%
+        set_engine("stats",
+        nstart = 100)
+    
+    #workflow 
+    kmeans_wflow <- workflow(
+    preprocessor = kmeans_rec,
+    spec = kmeans_spec)
+    # Extract the transformed data and cluster assignments
+    
     select(PC1, PC2, .cluster)
   
   # Plot the results
@@ -175,31 +190,15 @@ cluster_votes <- function(k, votes_df) {
     labs(x = "PC1", y = "PC2", title = paste0("Clustering Votes (k = ", k, ")"))
 }
 
+optimal_suggested = c(2, 4, 10)
 
+for (i in optimal_suggested){
+cluster_votes(optimal_suggested, votes_numeric)
+}
 #d. Run your function with each of the different potential optimal numbers of
 #clusters suggested by the different metrics calculated in part a and display
 #the graphs side by side.
-# Load the required libraries
 
-
-# Set the seed for reproducibility
-set.seed(20220412)
-
-# Load the data
-votes <- read.csv("votes_103.csv")
-
-# Remove the party column
-votes_numeric <- votes[, -1]
-
-# Identify and remove duplicate rows
-dups <- duplicated(votes_numeric)
-votes_numeric <- votes_numeric[!dups, ]
-
-# Check for missing values
-if (anyNA(votes_numeric)) {
-  # Remove rows with missing values
-  votes_numeric <- na.omit(votes_numeric)
-}
 
 # Calculate the optimal number of clusters using the different metrics
 opt_k_sil <- optimal_number_of_clusters(votes_numeric, max_k = 10, method = "silhouette")
