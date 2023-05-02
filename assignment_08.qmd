@@ -90,7 +90,7 @@ votes_pcs<- votes_pca_rec%>%
 
 
 ##plot 
-ggplot(votes_pcs, aes(x = PC1, y = PC2, color = party)) +
+plot1 <- ggplot(votes_pcs, aes(x = PC1, y = PC2, color = party)) +
   geom_point() +
   labs(title = "Senate Votes PC1 vs PC2 by Party",
        x = "PC1",
@@ -101,19 +101,10 @@ ggplot(votes_pcs, aes(x = PC1, y = PC2, color = party)) +
 regions <- read.csv("states_regions.csv")
 
 # Append region to votes_pcs
-votes_pcs <- left_join(votes_103, regions, by = c("name" = "state")) %>%
-  select(-name)
-
-# Create the scatterplot with color = party
-plot1 <- ggplot(votes_pcs, aes(x = PC1, y = PC2, color = party)) +
-  geom_point() +
-  labs(title = "Senate Votes PC1 vs PC2 by Party",
-       x = "PC1",
-       y = "PC2",
-       color = "Party")
+votes_pcs <- left_join(votes_pcs, regions, by = c("state" = "State.Code"))
 
 # Create the scatterplot with color = region
-plot2 <- ggplot(votes_pcs, aes(x = PC1, y = PC2, color = region)) +
+plot2 <- ggplot(votes_pcs, aes(x = PC1, y = PC2, color = Region)) +
   geom_point() +
   labs(title = "Senate Votes PC1 vs PC2 by Region",
        x = "PC1",
@@ -131,7 +122,6 @@ plot1 + plot2 + plot_layout(ncol = 2)
 #a. Create a tibble called votes_numeric that contains only the numeric votes
 #data from the 103rd Senate.
 
-
 votes_numeric <- select_if(votes_103, is.numeric)
 
 #b. Next, we will conduct cluster analysis on votes_numeric. Use
@@ -139,32 +129,20 @@ votes_numeric <- select_if(votes_103, is.numeric)
 #distance, and gap statistic. Make sure to set.seed(20220412) first. Note:
 #we used library(tidyclust) to calculate WSS in class.
 
-
 # Set the seed for reproducibility
 set.seed(20220412)
 
 # Remove any missing values
 votes_numeric <- na.omit(votes_numeric)
 
+
 # Check for missing values
-if (anyNA(votes_numeric)) {
-  # Remove rows with missing values
-  votes_numeric <- na.omit(votes_numeric)
-}
-
-votes_numeric <- select_if(votes_103, is.numeric)
-votes_numeric <- as.data.frame(votes_numeric)
-
+anyNA.data.frame(votes_numeric)
 
 # Identify and remove duplicate rows
 dups <- duplicated(votes_numeric)
 votes_numeric <- votes_numeric[!dups, ]
 
-# Check for missing values
-if (anyNA(votes_numeric)) {
-  # Remove rows with missing values
-  votes_numeric <- na.omit(votes_numeric)
-}
 
 # Calculate within sum of squares
 max_clusters <- nrow(votes_numeric)
