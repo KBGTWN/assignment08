@@ -29,6 +29,7 @@ library(rpart)
 library(ranger)
 library(yardstick)
 library(patchwork)
+library(FactoMineR)
 library(factoextra)
 library(cluster)
 library(recipes)
@@ -136,35 +137,13 @@ set.seed(20220412)
 votes_numeric <- na.omit(votes_numeric)
 
 
-# Check for missing values
-anyNA.data.frame(votes_numeric)
+fviz_nbclust(votes_numeric, FUNcluster = kmeans, method = "silhouette")
 
-# Identify and remove duplicate rows
-dups <- duplicated(votes_numeric)
-votes_numeric <- votes_numeric[!dups, ]
+fviz_nbclust(votes_numeric, FUNcluster =  = kmeans, method = c("wss",
+                                                     "silhoutte",
+                                                     "gap_stat"))
 
-
-# Calculate within sum of squares
-max_clusters <- nrow(votes_numeric)
-wss <- numeric(max_clusters)
-for (i in 1:max_clusters) {
-  km.res <- kmeans(votes_numeric, centers = i, nstart = 25)
-  wss[i] <- km.res$tot.withinss
-}
-
-#####Can't get sum of squares ^ to work properly
-
-# Calculate silhouette distance
-sil <- silhouette(kmeans(votes_numeric, centers = 2, nstart = 25))
-
-
-# Calculate gap statistic
-gap_stat <- gap_statistic(votes_numeric, 
-                           kmeans, 
-                           K.max = 10, 
-                           nboot = 50, 
-                           B = 100, 
-                           verbose = FALSE)
+#Note to elena - above should be 
 
 
 #c. Create a function that takes a number of clusters k as one argument and the votes_103 dataframe as another argument and uses library(recipes) and
