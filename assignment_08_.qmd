@@ -1,0 +1,452 @@
+---
+title: "Assignment 08"
+author: "Elena Spielmann and Keegan Brown"
+format: 
+  html:
+    code-fold: true
+    self-contained: true
+execute: 
+  echo: true
+  warning: false
+  error: false
+editor_options: 
+  chunk_output_type: console
+---
+
+Private github repository url: https://github.com/KBGTWN/assignment08
+
+Libraries
+
+```{r}
+library(readxl)
+library(tidyverse)
+library(tidymodels)
+library(themis)
+library(rpart.plot)
+library(vip)
+library(lubridate)
+library(rpart)
+library(ranger)
+library(yardstick)
+library(patchwork)
+library(FactoMineR)
+library(factoextra)
+library(cluster)
+library(recipes)
+library(tidyclust)
+library(tidytext)
+library(textrecipes)
+library(stopwords)
+library(pROC)
+
+```
+
+## Exercise 01
+
+This exercise uses data on U.S. Senate Votes from Session 103 (1993) to Session 114 (2016) from Brad Robinson via data.world. In the votes_time_series.csv data on Canvas, each row represents a senator-Session pair.
+
+```{r}
+
+#a. Read in the votes_time_series.csv file and replace all missing values with
+#0 (the value signifying an absent vote). Filter the dataframe to only
+#include the votes for Session 103 and save the result in a new dataframe
+#called votes_103.
+
+votes <- read.csv("votes_time_series.csv")%>%
+    replace(is.na(.), 0)
+
+votes_103 <- votes %>%
+  filter(session == "103")
+
+#b. Using library(recipes) create a recipe called votes_pca_rec that runs
+#Principal Components Analysis on the votes columns (they all start with
+#“v”). Add prep() at the end of the recipe to estimate the loadings.
+
+votes_pca_rec <- recipe(~ ., data = votes)%>%
+  step_pca(all_numeric(), id = "pca")%>%
+  prep()
+
+
+#c.How much variance does the first principal component explain? How much cumulative variance is explained by the first 5 principal components?
+votes_pca_rec %>%
+prep() %>%
+tidy(id = "pca", type = "variance") %>%
+filter(terms == "variance") %>%
+mutate(pct_var = value/sum(value)) %>%
+slice_head(n = 1)
+
+
+votes_pca_rec %>%
+  prep() %>%
+  tidy(id = "pca", type = "variance") %>%
+  filter(terms == "variance") %>%
+  mutate(pct_var = value/sum(value)) %>%
+  slice_head(n = 5)
+
+#d. bake() the prepped recipe you created in part b to obtain the principal components, assigning the output to a new dataframe called votes_pcs. Use votes_pcs to create two scatterplots visualizing the data with PC1 on the x-axis and PC2 on the y-axis: The first plot should use the aesthetic mapping color = party and the second plot should use color = region, where region is equal to one of the four Census regions (West, Midwest, Northeast, South). You can append region to votes_pcs by using the states_regions.csv file on Canvas. Make sure to include good titles and labels in your graph. Include the graphs side by side in your Quarto document. Hint: library(patchwork) will be useful for displaying the graphs side by side.
+
+##baking 
+votes_pcs<- votes_pca_rec%>%
+  prep()%>%
+  bake(new_data = votes)
+
+
+##plot 
+plot1 <- ggplot() + 
+  geom_point(data = votes_pcs, mapping = aes(x = PC1, y = PC2, color = party)) +
+  labs(title = "Senate Votes PC1 vs PC2 by Party",
+       x = "PC1",
+       y = "PC2",
+       color = "Party")
+
+plot1
+# Load the regions file
+regions <- read.csv("states_regions.csv")
+
+# Append region to votes_pcs
+votes_pcs <- left_join(votes_pcs, regions, by = c("state" = "State.Code"))
+
+# Create the scatterplot with color = region
+plot2 <- ggplot(votes_pcs, aes(x = PC1, y = PC2, color = Region)) +
+  geom_point() +
+  labs(title = "Senate Votes PC1 vs PC2 by Region",
+       x = "PC1",
+       y = "PC2",
+       color = "Region")
+
+# Display the plots side by side
+plot1 + plot2 + plot_layout(ncol = 2)
+
+```
+
+##Exercise 02
+
+```{r}
+#a. Create a tibble called votes_numeric that contains only the numeric votes
+#data from the 103rd Senate.
+
+votes_numeric <- votes_103 %>% 
+  select(starts_with('v'))
+
+#b. Next, we will conduct cluster analysis on votes_numeric. Use
+#library(factoextra) to calculate within sum of squares, silhouette
+#distance, and gap statistic. Make sure to set.seed(20220412) first. Note:
+#we used library(tidyclust) to calculate WSS in class.
+
+# Set the seed for reproducibility
+set.seed(20220412)
+
+
+fviz_nbclust(votes_numeric, FUNcluster = kmeans, method = "silhouette")
+fviz_nbclust(votes_numeric, FUNcluster = kmeans, method = "wss")
+fviz_nbclust(votes_numeric, FUNcluster = kmeans, method = "gap_stat")
+               
+#c. Create a function that takes a number of clusters k as one argument and the votes_103 dataframe as another argument and uses library(recipes) and
+#library(tidyclust) to perform PCA and kmeans clustering where k is set
+#as the number of clusters for kmeans and the votes columns are used as the
+#data. The function should then produce a scatterplot with PC1 on the x-axis
+#and PC2 on the y-axis and the color encoding the cluster assignment. The
+#graph should have good labels and a title that includes the number of
+#clusters being used (see the example below). The function should return a
+#ggplot object.
+
+cluster_votes <- function(k, votes_numeric) {
+  
+  # Create a recipe with PCA and kmeans
+  votes_rec <- recipe(~., data = votes_numeric) %>%
+    # Specify the columns to use for PCA
+    step_pca(starts_with("v"))%>%
+    prep()%>%
+    bake(new_data = votes_numeric)
+    
+    #recipe creation
+  kmeans_rec <- recipe(formula = ~ ., data = votes_numeric)%>%
+    step_select(all_numeric())
+  
+    #prep/bake
+    k_data_numeric <- kmeans_rec %>%
+            prep()
+    
+    #kmeans model spec 
+    kmeans_spec <- k_means(
+        num_clusters = 2 
+        ) %>%
+        set_engine("stats",
+        nstart = 100)
+    
+    #workflow 
+    kmeans_wflow <- workflow(
+    preprocessor = kmeans_rec,
+    spec = kmeans_spec)
+    
+    name<-kmeans_wflow %>%
+      fit(data = votes_numeric)%>%
+      extract_cluster_assignment() %>%
+    pull(.cluster)
+    # Extract the transformed data and cluster assignments
+    temp <- bind_cols(
+    votes_rec,
+    clusters = name)
+    
+  # Plot the results
+  ggplot(temp, aes(x = PC1, y = PC2, color = factor(.cluster))) + 
+    geom_point(size = 3) +
+    labs(x = "PC1", y = "PC2", title = paste0("Clustering Votes (k = ", k, ")"))
+}
+
+optimal_suggested = c(2, 4, 9)
+
+for (i in optimal_suggested){
+  cluster_votes(i, votes_numeric)
+}
+
+```
+
+```{r}
+#| eval: false
+
+#d. Run your function with each of the different potential optimal numbers of
+#clusters suggested by the different metrics calculated in part a and display
+#the graphs side by side.
+
+
+# Calculate the optimal number of clusters using the different metrics
+opt_k_sil <- optimal_number_of_clusters(votes_numeric, max_k = 10, method = "silhouette")
+opt_k_gap <- optimal_number_of_clusters(votes_numeric, max_k = 10, method = "gap_statistic")
+
+# Create the plots
+plot1 <- cluster_votes(opt_k_sil, votes_numeric)
+plot2 <- cluster_votes(opt_k_gap, votes_numeric)
+
+# Display the plots side by side
+grid.arrange(plot1, plot2, ncol = 2)
+
+
+```
+
+##Exercise 03
+
+```{r}
+#| eval: false
+#a. Read in the executive orders dataset used in the text analysis lab and filter to exclude rows where the text column is missing. Use the
+#unnest_tokens() function to create bigrams (two-word tokens) from the
+#text. In the lab we used this function to create single-word tokens. Read the
+#documentation to learn how to modify that function call to create
+#bigrams.The n-grams chapter of Text Mining with R may also be helpful.
+
+# Read in the executive orders dataset
+exec_orders <- read_csv("executive-orders.csv")
+
+# Filter out rows with missing text
+exec_orders <- exec_orders %>% 
+  filter(!is.na(text))
+
+# Create bigrams using unnest_tokens()
+exec_bigrams <- exec_orders %>%
+  unnest_tokens(bigram, text, token = "ngrams", n = 2)
+
+
+#b. Split the bigram column into two separate columns (word1 and word2) with
+#each word of the bigram (Hint: the separate() function may be helpful).
+#Filter the dataframe to rows that do not have any stop words for either word
+#of the bigram. Count the number of appearances of each bigram (unique
+#combinations of word1 and word2) and filter to rows with more than 150
+#appearances. Assign the result to bigram_150 and use the code below to
+#visualize the data.
+
+# Split bigrams into separate columns
+exec_bigrams_split <- exec_bigrams %>%
+  separate(bigram, c("word1", "word2"), sep = " ")
+
+# Remove stop words
+data(stop_words)
+exec_bigrams_filtered <- 
+  exec_bigrams_split%>%
+  anti_join(stop_words, by = c("word1" = "word", "word2" = "word"))
+
+#################above code does not work.^^ below attempt also didn't work.
+
+exec_bigrams_filtered <- 
+  exec_bigrams_split %>%
+  anti_join(stop_words, by = c("word1", "word2"))
+
+
+
+# Count appearances of each bigram and filter to those with more than 150 appearances
+bigram_150 <- exec_bigrams_filtered %>%
+  count(word1, word2, sort = TRUE) %>%
+  filter(n > 150)
+
+#c. Calculate the tf-idf for each president and bigram. To do this, you will first want to count the number of appearances of each bigram-president pair
+#(remembering to filter out stop words). After separating the bigrams into
+#separate words for filtering out stop words, you’ll want to merge the
+#individual word columns back into a single bigram column before calculating
+#tf-idf (Hint: check out the paste() function).
+
+# Count number of appearances of each bigram-president pair
+bigram_counts <- exec_bigrams_filtered %>%
+  group_by(president, word1, word2) %>%
+  summarize(count = n()) %>%
+  ungroup()
+
+# Separate bigrams into separate words for filtering out stop words
+bigram_counts_split <- bigram_counts %>%
+  separate(col = "bigram", into = c("word1", "word2"), sep = " ")
+
+# Filter out stop words
+bigram_counts_filtered <- bigram_counts_split %>%
+  anti_join(stop_words, by = c("word1" = "word", "word2" = "word")) %>%
+  filter(!is.na(word1), !is.na(word2)) %>%
+  unite(bigram, word1, word2, sep = " ")
+
+# Calculate tf-idf
+bigram_tfidf <- bigram_counts_filtered %>%
+  bind_tf_idf(term = bigram, document = president, n = count)
+
+# Print the first few rows
+head(bigram_tfidf)
+
+
+#d. Plot the bigrams with the 15 largest tf-idf values for each president.
+# Plot bigrams with largest tf-idf values for each president
+bigram_tfidf_top <- bigram_tfidf %>%
+  group_by(president) %>%
+  arrange(desc(tf_idf)) %>%
+  slice(1:15)
+
+ggplot(bigram_tfidf_top, aes(x = reorder(bigram, tf_idf), y = tf_idf, fill = president)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ president, scales = "free") +
+  coord_flip() +
+  labs(title = "Top 15 Bigrams by TF-IDF for Each President")
+
+```
+
+##Exercise 04 This exercise uses a dataset of the descriptions and voting outcomes of bills from the 114th Senate from legiscan.com. Your goal will be to create a supervised machine learning model using library(tidymodels) to classify whether each bill passed (passed = 1) or did not pass (passed = 0).
+
+```{r}
+
+#a. Read senate_bills_114.csv into R and save as an object called bills.
+#You will need to modify passed to be a factor with “1” as the first level and
+#“0” as the second as shown below. We do this because tidymodels by default
+#treats the first factor level as the positive case. How many bills in the
+#dataset passed?
+
+bills <- read_csv("senate_bills_114.csv") %>%
+  mutate(passed = factor(passed, labels = c("1", "0"), levels = c("1", "0")))
+
+sum(bills$passed == "1")
+# Output: 108 bill have passed
+
+
+#b. Split bills into a training and testing dataset setting strata = "passed"
+#and prop = 0.75. Note that you will not need the bill_number column and
+#can drop it from the dataframe before creating the split. Don’t forget to
+#set.seed(20220414) first.
+
+set.seed(20220414)
+
+# Drop bill_number column
+bills <- select(bills, -bill_number)
+
+# Split into training and testing datasets
+bill_split <- initial_split(bills, strata = passed, prop = 0.75)
+bill_train <- training(bill_split)
+bill_test <- testing(bill_split)
+
+
+#c. We will perform our text pre-processing steps using library(textrecipes),
+#a package built for tidymodels with additional recipe steps for text analysis.
+#Read the textrecipes website and function reference to identify the right
+#steps to create a recipe that performs the following steps: 1) tokenizes the
+#description column, 2) removes stopwords (note, you’ll have to
+#install.packages("stopwords") first to use step_stopwords), 3) stems
+#the words, 4) filters to the 200 most common tokens, 5) performs tf-idf.
+
+stop_words <- stopwords("en")
+
+bill_recipe <- recipe(passed ~ description, data = bill_train) %>%
+  step_tokenize(description) %>%
+  step_stopwords(description, stop_words) %>%
+  step_stem(description) %>%
+  step_tokenfilter(description, max_tokens = 200) %>%
+  step_tfidf(description, weighting = "term")
+
+stop_words <- stopwords("en")
+
+bill_recipe <- recipe(passed ~ description, data = bill_train) %>%
+  step_tokenize(description) %>%
+  step_stopwords(description, custom_stopword_source = stop_words) %>%
+  step_stem(description) %>%
+  step_tokenfilter(description, max_tokens = 200) %>%
+  step_tfidf(description, weighting = "term")
+
+```
+
+```{r}
+#| eval: false
+#d. prep() and bake() your recipe on the training data to take a look at the
+#words used for tf-idf (they will be the end of the column names). Are there
+#any words that seem like domain-specific stopwords? Update
+#step_stopwords() in your recipe to remove these stopwords using the
+#custom_stopword_source argument and re-create your recipe.
+
+text_prep <- prep(bill_recipe, training = bill_train)
+text_bake <- bake(text_prep, new_data = NULL)
+
+#e. Create a model object using logistic regression (logistic_reg()) and the
+#"glm" package for the engine. Create a workflow with your recipe and model
+#specification and then pass that workflow to fit() to train the model on the
+#training data. (Note that we aren’t asking you to do cross-validation or
+#model tuning here)
+
+# Create the model specification
+log_reg_spec <- logistic_reg() %>% 
+  set_engine("glm")
+
+# Create the workflow
+bill_wf <- workflow() %>% 
+  add_recipe(bill_recipe) %>% 
+  add_model(log_reg_spec)
+
+# Fit the model on the training data
+bill_fit <- fit(bill_wf, data = bill_train)
+
+#f. Use the fitted model to predict() the class membership and class
+#probability using the test data. Calculate the accuracy, precision, recall, and the roc curve for your model. Using these metric results, how did your model do? What are at least three things you might add to your approach to
+#improve your model results?
+
+# Predict class membership and class probability using the test data
+bill_test_predictions <- predict(bill_workflow, new_data = bill_test, type = "prob")
+
+# Extract the predicted class probabilities for the positive class
+bill_test_prob <- bill_test_predictions %>% 
+  as_tibble() %>% 
+  select(.pred_1)
+
+# Extract the predicted class memberships (0 or 1)
+bill_test_pred <- bill_test_predictions %>% 
+  predict(model = "glmnet", new_data = bill_test)
+
+# Calculate the accuracy, precision, recall, and ROC curve
+
+
+bill_test_roc <- roc(bill_test$passed, bill_test_prob$.pred_1)
+
+bill_test_accuracy <- mean(bill_test$passed == bill_test_pred)
+
+bill_test_precision <- precision(bill_test$passed, bill_test_pred)
+
+bill_test_recall <- recall(bill_test$passed, bill_test_pred)
+
+
+```
+The accuracy tells us the proportion of correct predictions overall. The precision tells us the proportion of positive predictions that were actually correct, while the recall tells us the proportion of actual positives that were correctly predicted. The ROC curve plots the true positive rate (recall) against the false positive rate, and the area under the curve (AUC) can be used as a metric of the overall performance of the model.
+
+Model Improvement Suggestions: 
+
+1. Experiment with different text preprocessing techniques. We can try different tokenization methods, stemmers, stopword lists, or filtering criteria to see if they improve the model's performance.
+
+2. Explore different models or model parameters. Logistic regression is a good starting point, but there are many other models that can be used for text classification, such as random forests, support vector machines, or neural networks. Additionally, we can try tuning the parameters of the model to see if we can improve its performance.
+
+3. Incorporate additional features or external data sources. In some cases, adding features or data from external sources can improve the model's performance. For example, we can try incorporating metadata about the bills (e.g., the sponsor, the committee, the topic), or using pre-trained word embeddings to capture semantic information.
